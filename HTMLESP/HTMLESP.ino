@@ -139,6 +139,7 @@ static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %
 httpd_handle_t camera_httpd = NULL;
 httpd_handle_t stream_httpd = NULL;
 
+
 static const char PROGMEM INDEX_HTML[] = R"rawliteral(
 <html>
   <head>
@@ -178,7 +179,9 @@ static const char PROGMEM INDEX_HTML[] = R"rawliteral(
     <img src="" id="photo" >
     <table>
       <tr><td colspan="3" align="center"><button class="button" onmousedown="toggleCheckbox('forward');" ontouchstart="toggleCheckbox('forward');" onmouseup="toggleCheckbox('stop');" ontouchend="toggleCheckbox('stop');">Forward</button></td></tr>
-      <tr><td align="center"><button class="button" onmouseup="toggleCheckbox('stop');" ontouchend="toggleCheckbox('stop');">Left</button></td><td align="center"><button class="button" onmousedown="toggleCheckbox('stop');" ontouchstart="toggleCheckbox('stop');">Stop</button></td><td align="center"><button class="button" onmousedown="toggleCheckbox('right');" ontouchstart="toggleCheckbox('right');" onmouseup="toggleCheckbox('stop');" ontouchend="toggleCheckbox('stop');">Right</button></td></tr>
+      <tr><td align="center"><button class="button" onmousedown="toggleCheckbox('left');" ontouchstart="toggleCheckbox('left');" onmouseup="toggleCheckbox('stop');" ontouchend="toggleCheckbox('stop');">Left</button></td>
+          <td align="center"><button class="button" onmousedown="toggleCheckbox('stop');" ontouchstart="toggleCheckbox('stop');">Stop</button></td>
+          <td align="center"><button class="button" onmousedown="toggleCheckbox('right');" ontouchstart="toggleCheckbox('right');" onmouseup="toggleCheckbox('stop');" ontouchend="toggleCheckbox('stop');">Right</button></td></tr>
       <tr><td colspan="3" align="center"><button class="button" onmousedown="toggleCheckbox('backward');" ontouchstart="toggleCheckbox('backward');" onmouseup="toggleCheckbox('stop');" ontouchend="toggleCheckbox('stop');">Backward</button></td></tr>                   
     </table>
    <script>
@@ -257,6 +260,46 @@ static esp_err_t stream_handler(httpd_req_t *req){
   return res;
 }
 
+void left(){
+    Serial.println("Left");
+    digitalWrite(MOTOR_1_PIN_1, 0);
+    digitalWrite(MOTOR_1_PIN_2, 0);
+    digitalWrite(MOTOR_2_PIN_1, 1);
+    digitalWrite(MOTOR_2_PIN_2, 0);
+}
+
+void right(){
+    Serial.println("Right");
+    digitalWrite(MOTOR_1_PIN_1, 0);
+    digitalWrite(MOTOR_1_PIN_2, 0);
+    digitalWrite(MOTOR_2_PIN_1, 0);
+    digitalWrite(MOTOR_2_PIN_2, 1);
+}
+
+void foward(){
+  Serial.println("Forward");
+  digitalWrite(MOTOR_1_PIN_1, 0);
+  digitalWrite(MOTOR_1_PIN_2, 0);
+  digitalWrite(MOTOR_2_PIN_1, 1);
+  digitalWrite(MOTOR_2_PIN_2, 1);
+}
+
+void back(){
+    Serial.println("Backward");
+    digitalWrite(MOTOR_1_PIN_1, 1);
+    digitalWrite(MOTOR_1_PIN_2, 1);
+    digitalWrite(MOTOR_2_PIN_1, 0);
+    digitalWrite(MOTOR_2_PIN_2, 0);
+}
+
+void stop(){
+    Serial.println("Stop");
+    digitalWrite(MOTOR_1_PIN_1, 0);
+    digitalWrite(MOTOR_1_PIN_2, 0);
+    digitalWrite(MOTOR_2_PIN_1, 0);
+    digitalWrite(MOTOR_2_PIN_2, 0);
+}
+
 static esp_err_t cmd_handler(httpd_req_t *req){
   char*  buf;
   size_t buf_len;
@@ -291,39 +334,19 @@ static esp_err_t cmd_handler(httpd_req_t *req){
   int res = 0;
   
   if(!strcmp(variable, "forward")) {
-    Serial.println("Forward");
-    digitalWrite(MOTOR_1_PIN_1, 0);
-    digitalWrite(MOTOR_1_PIN_2, 0);
-    digitalWrite(MOTOR_2_PIN_1, 1);
-    digitalWrite(MOTOR_2_PIN_2, 1);
+    foward();
   }
   else if(!strcmp(variable, "left")) {
-    Serial.println("Left");
-    digitalWrite(MOTOR_1_PIN_1, 0);
-    digitalWrite(MOTOR_1_PIN_2, 0);
-    digitalWrite(MOTOR_2_PIN_1, 1);
-    digitalWrite(MOTOR_2_PIN_2, 0);
+    left();
   }
   else if(!strcmp(variable, "right")) {
-    Serial.println("Right");
-    digitalWrite(MOTOR_1_PIN_1, 0);
-    digitalWrite(MOTOR_1_PIN_2, 0);
-    digitalWrite(MOTOR_2_PIN_1, 0);
-    digitalWrite(MOTOR_2_PIN_2, 1);
+    right();
   }
   else if(!strcmp(variable, "backward")) {
-    Serial.println("Backward");
-    digitalWrite(MOTOR_1_PIN_1, 1);
-    digitalWrite(MOTOR_1_PIN_2, 1);
-    digitalWrite(MOTOR_2_PIN_1, 0);
-    digitalWrite(MOTOR_2_PIN_2, 0);
+    back();
   }
   else if(!strcmp(variable, "stop")) {
-    Serial.println("Stop");
-    digitalWrite(MOTOR_1_PIN_1, 0);
-    digitalWrite(MOTOR_1_PIN_2, 0);
-    digitalWrite(MOTOR_2_PIN_1, 0);
-    digitalWrite(MOTOR_2_PIN_2, 0);
+    stop();
   }
   else {
     res = -1;
