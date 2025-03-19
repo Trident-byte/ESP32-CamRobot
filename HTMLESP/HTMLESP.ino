@@ -15,6 +15,8 @@
 #include "soc/soc.h"             // disable brownout problems
 #include "soc/rtc_cntl_reg.h"    // disable brownout problems
 #include "esp_http_server.h"
+#include <ESP32_Camera_AI_inferencing.h>
+#include "edge-impulse-sdk/dsp/image/image.hpp"
 
 // Replace with your network credentials
 const char* ssid = "MyPhone";
@@ -127,6 +129,12 @@ const char* password = "bigbrain";
   #error "Camera model not selected"
 #endif
 
+#define EI_CAMERA_RAW_FRAME_BUFFER_COLS 320
+#define EI_CAMERA_RAW_FRAME_BUFFER_ROWS 240
+#define EI_CAMERA_FRAME_BYTE_SIZE 3
+
+
+
 #define MOTOR_1_PIN_1    14
 #define MOTOR_1_PIN_2    15
 #define MOTOR_2_PIN_1    13
@@ -135,6 +143,7 @@ const char* password = "bigbrain";
 static const char* _STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
 static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
 static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
+uint8_t *snapshot_buf;  //points to the output of the capture
 
 httpd_handle_t camera_httpd = NULL;
 httpd_handle_t stream_httpd = NULL;
@@ -195,6 +204,8 @@ static const char PROGMEM INDEX_HTML[] = R"rawliteral(
   </body>
 </html>
 )rawliteral";
+
+bool ei_camera_capture(uint32_t img_width, uint32_t img_height, uint8_t *out_buf);
 
 static esp_err_t index_handler(httpd_req_t *req){
   httpd_resp_set_type(req, "text/html");
@@ -360,6 +371,75 @@ static esp_err_t cmd_handler(httpd_req_t *req){
   return httpd_resp_send(req, NULL, 0);
 }
 
+// /**
+//  * @brief      Capture, rescale and crop image
+//  *
+//  * @param[in]  img_width     width of output image
+//  * @param[in]  img_height    height of output image
+//  * @param[in]  out_buf       pointer to store output image, NULL may be used
+//  *                           if ei_camera_frame_buffer is to be used for capture and resize/cropping.
+//  *
+//  * @retval     false if not initialised, image captured, rescaled or cropped failed
+//  *
+//  */
+bool ei_camera_capture(uint32_t img_width, uint32_t img_height, uint8_t *out_buf) {
+  bool do_resize = false;
+
+  camera_fb_t *fb = esp_camera_fb_get();
+
+  if (!fb) {
+    ei_printf("Camera capture failed\n");
+    return false;
+  }
+
+  bool converted = fmt2rgb888(fb->buf, fb->len, PIXFORMAT_JPEG, snapshot_buf);
+
+  esp_camera_fb_return(fb);
+
+  if (!converted) {
+    ei_printf("Conversion failed\n");
+    return false;
+  }
+
+  if ((img_width != EI_CAMERA_RAW_FRAME_BUFFER_COLS)
+      || (img_height != EI_CAMERA_RAW_FRAME_BUFFER_ROWS)) {
+    do_resize = true;
+  }
+
+  if (do_resize) {
+    ei::image::processing::crop_and_interpolate_rgb888(
+      out_buf,
+      EI_CAMERA_RAW_FRAME_BUFFER_COLS,
+      EI_CAMERA_RAW_FRAME_BUFFER_ROWS,
+      out_buf,
+      img_width,
+      img_height);
+  }
+
+
+  return true;
+}
+
+static int ei_camera_get_data(size_t offset, size_t length, float *out_ptr) {
+  // we already have a RGB888 buffer, so recalculate offset into pixel index
+  size_t pixel_ix = offset * 3;
+  size_t pixels_left = length;
+  size_t out_ptr_ix = 0;
+
+  while (pixels_left != 0) {
+    // Swap BGR to RGB here
+    // due to https://github.com/espressif/esp32-camera/issues/379
+    out_ptr[out_ptr_ix] = (snapshot_buf[pixel_ix + 2] << 16) + (snapshot_buf[pixel_ix + 1] << 8) + snapshot_buf[pixel_ix];
+
+    // go to the next pixel
+    out_ptr_ix++;
+    pixel_ix += 3;
+    pixels_left--;
+  }
+  // and done!
+  return 0;
+}
+
 void startCameraServer(){
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
@@ -459,5 +539,64 @@ void setup() {
 }
 
 void loop() {
+  // instead of wait_ms, we'll wait on the signal, this allows threads to cancel us...
+  if (ei_sleep(5) != EI_IMPULSE_OK) {
+    return;
+  }
+
+  snapshot_buf = (uint8_t *)malloc(EI_CAMERA_RAW_FRAME_BUFFER_COLS * EI_CAMERA_RAW_FRAME_BUFFER_ROWS * EI_CAMERA_FRAME_BYTE_SIZE);
+
+  // check if allocation was successful
+  if (snapshot_buf == nullptr) {
+    ei_printf("ERR: Failed to allocate snapshot buffer!\n");
+    return;
+  }
+
+  ei::signal_t signal;
+  signal.total_length = EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT;
+  signal.get_data = &ei_camera_get_data;
+
+  if (ei_camera_capture((size_t)EI_CLASSIFIER_INPUT_WIDTH, (size_t)EI_CLASSIFIER_INPUT_HEIGHT, snapshot_buf) == false) {
+    ei_printf("Failed to capture image\r\n");
+    free(snapshot_buf);
+    return;
+  }
+
+  // Run the classifier
+  ei_impulse_result_t result = { 0 };
+
+  EI_IMPULSE_ERROR err = run_classifier(&signal, &result);
+  if (err != EI_IMPULSE_OK) {
+    ei_printf("ERR: Failed to run classifier (%d)\n", err);
+    return;
+  }
+
+  // print the predictions
+  ei_printf("Predictions (DSP: %d ms., Classification: %d ms., Anomaly: %d ms.): \n",
+            result.timing.dsp, result.timing.classification, result.timing.anomaly);
+
+#if EI_CLASSIFIER_OBJECT_DETECTION == 1
+  bool bb_found = result.bounding_boxes[0].value > 0;
+  for (size_t ix = 0; ix < result.bounding_boxes_count; ix++) {
+    auto bb = result.bounding_boxes[ix];
+    if (bb.value == 0) {
+      continue;
+    }
+    ei_printf("%s (%f) [ x: %u, y: %u, width: %u, height: %u ]\n", bb.label, bb.value, bb.x, bb.y, bb.width, bb.height);
   
+  }
+  if (!bb_found) {
+    ei_printf("    No objects found\n");
+  }
+#else
+  for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
+    ei_printf("    %s: %.5f\n", result.classification[ix].label,
+              result.classification[ix].value);
+  }
+#endif
+
+#if EI_CLASSIFIER_HAS_ANOMALY == 1
+  ei_printf("    anomaly score: %.3f\n", result.anomaly);
+#endif
+  free(snapshot_buf);
 }
