@@ -26,7 +26,7 @@ const char* password = "bigbrain";
 
 #define CAMERA_MODEL_AI_THINKER
 //#define CAMERA_MODEL_M5STACK_PSRAM
-#define CAMERA_MODEL_M5STACK_WITHOUT_PSRAM
+// #define CAMERA_MODEL_M5STACK_WITHOUT_PSRAM
 //#define CAMERA_MODEL_M5STACK_PSRAM_B
 //#define CAMERA_MODEL_WROVER_KIT
 
@@ -201,7 +201,7 @@ static const char PROGMEM INDEX_HTML[] = R"rawliteral(
    }
    window.onload = document.getElementById("photo").src = window.location.href.slice(0, -1) + ":81/stream";
   </script>
-  </body>
+  </body>camera capture
 </html>
 )rawliteral";
 
@@ -521,6 +521,11 @@ void setup() {
   if (err != ESP_OK) {
     Serial.printf("Camera init failed with error 0x%x", err);
     return;
+  }
+  if (ei_camera_init() == false) {
+    ei_printf("Failed to initialize Camera!\r\n");
+  } else {
+    ei_printf("Camera initialized\r\n");
   }
   // Wi-Fi connection
   WiFi.begin(ssid, password);
