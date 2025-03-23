@@ -227,7 +227,7 @@ static esp_err_t stream_handler(httpd_req_t *req){
   while(true){
     fb = esp_camera_fb_get();
     if (!fb) {
-      Serial.println("Camera capture failed");
+      Serial.println("Camera capture failed in stream");
       res = ESP_FAIL;
     } else {
       if(fb->width > 400){
