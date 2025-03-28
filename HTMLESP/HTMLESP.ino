@@ -204,7 +204,7 @@ static const char PROGMEM INDEX_HTML[] = R"rawliteral(
   </body>camera capture
 </html>
 )rawliteral";
-
+bool ei_camera_init(void);
 bool ei_camera_capture(uint32_t img_width, uint32_t img_height, uint8_t *out_buf);
 
 static esp_err_t index_handler(httpd_req_t *req){
@@ -471,6 +471,30 @@ void startCameraServer(){
   if (httpd_start(&stream_httpd, &config) == ESP_OK) {
     httpd_register_uri_handler(stream_httpd, &stream_uri);
   }
+}
+
+bool ei_camera_init(void) {
+#if defined(CAMERA_MODEL_ESP_EYE)
+  pinMode(13, INPUT_PULLUP);
+  pinMode(14, INPUT_PULLUP);
+#endif
+  //Does not initalize the camera here due to problem with scope
+  sensor_t *s = esp_camera_sensor_get();
+  // initial sensors are flipped vertically and colors are a bit saturated
+  if (s->id.PID == OV3660_PID) {
+    s->set_vflip(s, 1);       // flip it back
+    s->set_brightness(s, 1);  // up the brightness just a bit
+    s->set_saturation(s, 0);  // lower the saturation
+  }
+#if defined(CAMERA_MODEL_M5STACK_WIDE)
+  s->set_vflip(s, 1);
+  s->set_hmirror(s, 1);
+#elif defined(CAMERA_MODEL_ESP_EYE)
+  s->set_vflip(s, 1);
+  s->set_hmirror(s, 1);
+  s->set_awb_gain(s, 1);
+#endif
+  return true;
 }
 
 void setup() {
