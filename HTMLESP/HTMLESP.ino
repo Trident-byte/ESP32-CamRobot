@@ -165,6 +165,7 @@ static camera_config_t camera_config = {
   .fb_location = CAMERA_FB_IN_PSRAM,
   .grab_mode = CAMERA_GRAB_WHEN_EMPTY,
 };
+static bool is_initialised = false;
 
 #define MOTOR_1_PIN_1    14
 #define MOTOR_1_PIN_2    15
