@@ -352,12 +352,6 @@ void setup() {
   } else {
     ei_printf("Camera initialized\r\n");
   }
-  // Wi-Fi connection
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
 }
 
 void loop() {
@@ -405,14 +399,19 @@ void loop() {
       continue;
     }
     ei_printf("%s (%f) [ x: %u, y: %u, width: %u, height: %u ]\n", bb.label, bb.value, bb.x, bb.y, bb.width, bb.height);
-    if(bb.x < TOLERANCE * -1){
+    int offsetX = bb.x - (EI_CLASSIFIER_INPUT_WIDTH)/2;
+    int offsetY = bb.y - (EI_CLASSIFIER_INPUT_HEIGHT)/2;
+    if(offsetX < TOLERANCE * -1){
       Serial.print("I want to move left");
     }
-    else if(bb.x > TOLERANCE){
+    else if(offsetX > TOLERANCE){
       Serial.print("I want to move right");
     }
-    else{
-      Serial.print("Im just fine");
+    if(offsetY< TOLERANCE * -1){
+      Serial.print("I want to move up");
+    }
+    else if(offsetY > TOLERANCE){
+      Serial.print("I want to move down");
     }
   }
   if (!bb_found) {
