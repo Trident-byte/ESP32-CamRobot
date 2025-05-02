@@ -1,11 +1,3 @@
-/*********
-  Rui Santos
-  Complete instructions at https://RandomNerdTutorials.com/esp32-cam-projects-ebook/
-  
-  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files.
-  The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-*********/
-
 #include "esp_camera.h"
 #include <WiFi.h>
 #include "esp_timer.h"
@@ -19,76 +11,10 @@
 #include <ESP32Servo.h>
 #include "edge-impulse-sdk/dsp/image/image.hpp"
 
-// Replace with your network credentials
-const char* ssid = "MyPhone";
-const char* password = "bigbrain";
-
 #define PART_BOUNDARY "123456789000000000000987654321"
 
 #define CAMERA_MODEL_AI_THINKER
-//#define CAMERA_MODEL_M5STACK_PSRAM
-// #define CAMERA_MODEL_M5STACK_WITHOUT_PSRAM
-//#define CAMERA_MODEL_M5STACK_PSRAM_B
-//#define CAMERA_MODEL_WROVER_KIT
-
-#if defined(CAMERA_MODEL_WROVER_KIT)
-  #define PWDN_GPIO_NUM    -1
-  #define RESET_GPIO_NUM   -1
-  #define XCLK_GPIO_NUM    21
-  #define SIOD_GPIO_NUM    26
-  #define SIOC_GPIO_NUM    27
-  
-  #define Y9_GPIO_NUM      35
-  #define Y8_GPIO_NUM      34
-  #define Y7_GPIO_NUM      39
-  #define Y6_GPIO_NUM      36
-  #define Y5_GPIO_NUM      19
-  #define Y4_GPIO_NUM      18
-  #define Y3_GPIO_NUM       5
-  #define Y2_GPIO_NUM       4
-  #define VSYNC_GPIO_NUM   25
-  #define HREF_GPIO_NUM    23
-  #define PCLK_GPIO_NUM    22
-
-#elif defined(CAMERA_MODEL_M5STACK_PSRAM)
-  #define PWDN_GPIO_NUM     -1
-  #define RESET_GPIO_NUM    15
-  #define XCLK_GPIO_NUM     27
-  #define SIOD_GPIO_NUM     25
-  #define SIOC_GPIO_NUM     23
-  
-  #define Y9_GPIO_NUM       19
-  #define Y8_GPIO_NUM       36
-  #define Y7_GPIO_NUM       18
-  #define Y6_GPIO_NUM       39
-  #define Y5_GPIO_NUM        5
-  #define Y4_GPIO_NUM       34
-  #define Y3_GPIO_NUM       35
-  #define Y2_GPIO_NUM       32
-  #define VSYNC_GPIO_NUM    22
-  #define HREF_GPIO_NUM     26
-  #define PCLK_GPIO_NUM     21
-
-#elif defined(CAMERA_MODEL_M5STACK_WITHOUT_PSRAM)
-  #define PWDN_GPIO_NUM     -1
-  #define RESET_GPIO_NUM    15
-  #define XCLK_GPIO_NUM     27
-  #define SIOD_GPIO_NUM     25
-  #define SIOC_GPIO_NUM     23
-  
-  #define Y9_GPIO_NUM       19
-  #define Y8_GPIO_NUM       36
-  #define Y7_GPIO_NUM       18
-  #define Y6_GPIO_NUM       39
-  #define Y5_GPIO_NUM        5
-  #define Y4_GPIO_NUM       34
-  #define Y3_GPIO_NUM       35
-  #define Y2_GPIO_NUM       17
-  #define VSYNC_GPIO_NUM    22
-  #define HREF_GPIO_NUM     26
-  #define PCLK_GPIO_NUM     21
-
-#elif defined(CAMERA_MODEL_AI_THINKER)
+if defined(CAMERA_MODEL_AI_THINKER)
   #define PWDN_GPIO_NUM     32
   #define RESET_GPIO_NUM    -1
   #define XCLK_GPIO_NUM      0
@@ -106,29 +32,6 @@ const char* password = "bigbrain";
   #define VSYNC_GPIO_NUM    25
   #define HREF_GPIO_NUM     23
   #define PCLK_GPIO_NUM     22
-
-#elif defined(CAMERA_MODEL_M5STACK_PSRAM_B)
-  #define PWDN_GPIO_NUM     -1
-  #define RESET_GPIO_NUM    15
-  #define XCLK_GPIO_NUM     27
-  #define SIOD_GPIO_NUM     22
-  #define SIOC_GPIO_NUM     23
-  
-  #define Y9_GPIO_NUM       19
-  #define Y8_GPIO_NUM       36
-  #define Y7_GPIO_NUM       18
-  #define Y6_GPIO_NUM       39
-  #define Y5_GPIO_NUM        5
-  #define Y4_GPIO_NUM       34
-  #define Y3_GPIO_NUM       35
-  #define Y2_GPIO_NUM       32
-  #define VSYNC_GPIO_NUM    25
-  #define HREF_GPIO_NUM     26
-  #define PCLK_GPIO_NUM     21
-
-#else
-  #error "Camera model not selected"
-#endif
 
 #define EI_CAMERA_RAW_FRAME_BUFFER_COLS 320
 #define EI_CAMERA_RAW_FRAME_BUFFER_ROWS 240
@@ -169,81 +72,15 @@ static camera_config_t camera_config = {
 };
 static bool is_initialised = false;
 
-#define MOTOR_1_PIN_1    14
-#define MOTOR_1_PIN_2    15
-#define MOTOR_2_PIN_1    13
-#define MOTOR_2_PIN_2    12
-static const int servoXPin = 17;
-static const int servoYPin = 2;
-
-Servo servoX;
-Servo servoY;
-
-static const char* _STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
-static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
-static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
+//The servo should move the camera left to right
+static const int servoXPin = 14; 
 static int xAngle = 90;
-static int yAngle = 140;
-uint8_t *snapshot_buf;  //points to the output of the capture
 
 httpd_handle_t camera_httpd = NULL;
 httpd_handle_t stream_httpd = NULL;
-
-
 bool ei_camera_init(void);
 bool ei_camera_capture(uint32_t img_width, uint32_t img_height, uint8_t *out_buf);
 
-void left(){
-    Serial.println("Left");
-    digitalWrite(MOTOR_1_PIN_1, 0);
-    digitalWrite(MOTOR_1_PIN_2, 0);
-    digitalWrite(MOTOR_2_PIN_1, 1);
-    digitalWrite(MOTOR_2_PIN_2, 0);
-}
-
-void right(){
-    Serial.println("Right");
-    digitalWrite(MOTOR_1_PIN_1, 0);
-    digitalWrite(MOTOR_1_PIN_2, 0);
-    digitalWrite(MOTOR_2_PIN_1, 0);
-    digitalWrite(MOTOR_2_PIN_2, 1);
-}
-
-void foward(){
-  Serial.println("Forward");
-  digitalWrite(MOTOR_1_PIN_1, 0);
-  digitalWrite(MOTOR_1_PIN_2, 0);
-  digitalWrite(MOTOR_2_PIN_1, 1);
-  digitalWrite(MOTOR_2_PIN_2, 1);
-}
-
-void back(){
-    Serial.println("Backward");
-    digitalWrite(MOTOR_1_PIN_1, 1);
-    digitalWrite(MOTOR_1_PIN_2, 1);
-    digitalWrite(MOTOR_2_PIN_1, 0);
-    digitalWrite(MOTOR_2_PIN_2, 0);
-}
-
-void stop(){
-    Serial.println("Stop");
-    digitalWrite(MOTOR_1_PIN_1, 0);
-    digitalWrite(MOTOR_1_PIN_2, 0);
-    digitalWrite(MOTOR_2_PIN_1, 0);
-    digitalWrite(MOTOR_2_PIN_2, 0);
-}
-
-// /**
-//  * @brief      Capture, rescale and crop image
-//  *
-//  * @param[in]  img_width     width of output image
-//  * @param[in]  img_height    height of output image
-//  * @param[in]  out_buf       pointer to store output image, NULL may be used
-//  *                           if ei_camera_frame_buffer is to be used for capture and resize/cropping.
-//  *
-//  * @retval     false if not initialised, image captured, rescaled or cropped failed
-//  *
-//  */
 bool ei_camera_capture(uint32_t img_width, uint32_t img_height, uint8_t *out_buf) {
   bool do_resize = false;
 
@@ -302,11 +139,6 @@ static int ei_camera_get_data(size_t offset, size_t length, float *out_ptr) {
   return 0;
 }
 
-/**
- * @brief   Setup image sensor & start streaming
- *
- * @retval  false if initialisation failed
- */
  bool ei_camera_init(void) {
 
   if (is_initialised) return true;
@@ -346,12 +178,7 @@ static int ei_camera_get_data(size_t offset, size_t length, float *out_ptr) {
 
 void setup() {
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
-  
-  pinMode(MOTOR_1_PIN_1, OUTPUT);
-  pinMode(MOTOR_1_PIN_2, OUTPUT);
-  pinMode(MOTOR_2_PIN_1, OUTPUT);
-  pinMode(MOTOR_2_PIN_2, OUTPUT);
-  
+
   Serial.begin(115200);
   Serial.setDebugOutput(false);
   
@@ -361,10 +188,8 @@ void setup() {
     ei_printf("Camera initialized\r\n");
   }
 
-  // servoX.attach(servoXPin);
-  servoY.attach(servoYPin);
-  // servoX.write(xAngle);
-  servoY.write(yAngle);
+  servoX.attach(servoXPin);
+  servoX.write(xAngle);
 }
 
 void loop() {
@@ -412,37 +237,18 @@ void loop() {
       continue;
     }
     ei_printf("%s (%f) [ x: %u, y: %u, width: %u, height: %u ]\n", bb.label, bb.value, bb.x, bb.y, bb.width, bb.height);
-    int offsetX = bb.x - (EI_CLASSIFIER_INPUT_WIDTH)/2;
-    int offsetY = bb.y - (EI_CLASSIFIER_INPUT_HEIGHT)/2;
+    int offsetX = bb.x - bb.width/2;
     if(offsetX < TOLERANCE * -1){
-      // xAngle -= 1;
-      left();
+      xAngle -= 1;
       Serial.print("I want to move left");
     }
     else if(offsetX > TOLERANCE){
-      // xAngle += 1;
-      right();
+      xAngle += 1;
       Serial.print("I want to move right");
-    }
-    // if(offsetY < TOLERANCE * -1){
-    //   yAngle = min(0, yAngle - 1);
-    //   Serial.print("I want to move up");
-    // }
-    // else if(offsetY > TOLERANCE){
-    //   yAngle = max(180, yAngle + 1);
-    //   Serial.print("I want to move down");
-    // }
-    if(abs(offsetX) <= TOLERANCE){
-      foward();
     }
     delay(15);
   }
-  if (!bb_found) {
-    ei_printf("    No objects found\n");
-  }
   servoX.write(xAngle);
-  servoY.write(yAngle);
-  stop();
   delay(300);
 #else
   for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
