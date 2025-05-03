@@ -14,7 +14,7 @@
 #define PART_BOUNDARY "123456789000000000000987654321"
 
 #define CAMERA_MODEL_AI_THINKER
-if defined(CAMERA_MODEL_AI_THINKER)
+#if defined(CAMERA_MODEL_AI_THINKER)
   #define PWDN_GPIO_NUM     32
   #define RESET_GPIO_NUM    -1
   #define XCLK_GPIO_NUM      0
@@ -32,6 +32,7 @@ if defined(CAMERA_MODEL_AI_THINKER)
   #define VSYNC_GPIO_NUM    25
   #define HREF_GPIO_NUM     23
   #define PCLK_GPIO_NUM     22
+#endif
 
 #define EI_CAMERA_RAW_FRAME_BUFFER_COLS 320
 #define EI_CAMERA_RAW_FRAME_BUFFER_ROWS 240
@@ -70,11 +71,15 @@ static camera_config_t camera_config = {
   .fb_location = CAMERA_FB_IN_PSRAM,
   .grab_mode = CAMERA_GRAB_WHEN_EMPTY,
 };
+
 static bool is_initialised = false;
 
 //The servo should move the camera left to right
 static const int servoXPin = 14; 
 static int xAngle = 90;
+uint8_t *snapshot_buf;  //points to the output of the capture
+
+Servo servoX;
 
 httpd_handle_t camera_httpd = NULL;
 httpd_handle_t stream_httpd = NULL;
