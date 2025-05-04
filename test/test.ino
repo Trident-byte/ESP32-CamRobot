@@ -242,7 +242,7 @@ void loop() {
       continue;
     }
     ei_printf("%s (%f) [ x: %u, y: %u, width: %u, height: %u ]\n", bb.label, bb.value, bb.x, bb.y, bb.width, bb.height);
-    int offsetX = bb.x - bb.width/2;
+    int offsetX = bb.x - (EI_CLASSIFIER_INPUT_WIDTH)/2;
     if(offsetX < TOLERANCE * -1){
       xAngle -= 1;
       Serial.print("I want to move left");
@@ -254,7 +254,6 @@ void loop() {
     delay(15);
   }
   servoX.write(xAngle);
-  delay(300);
 #else
   for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
     ei_printf("    %s: %.5f\n", result.classification[ix].label,
