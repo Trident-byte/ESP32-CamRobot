@@ -244,11 +244,11 @@ void loop() {
     ei_printf("%s (%f) [ x: %u, y: %u, width: %u, height: %u ]\n", bb.label, bb.value, bb.x, bb.y, bb.width, bb.height);
     int offsetX = bb.x - (EI_CLASSIFIER_INPUT_WIDTH)/2;
     if(offsetX < TOLERANCE * -1){
-      xAngle -= 1;
+      xAngle += 1;
       Serial.print("I want to move left");
     }
     else if(offsetX > TOLERANCE){
-      xAngle += 1;
+      xAngle -= 1;
       Serial.print("I want to move right");
     }
     delay(15);
